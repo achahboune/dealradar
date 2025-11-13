@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const BASE_URL = "https://dealradar-fqahe07k0-alaas-projects-0e002c10.vercel.app";
+const BASE_URL = "https://dealradar-8m6achkcg-alaas-projects-0e002c10.vercel.app";
 
 export async function GET() {
   try {
