@@ -5,7 +5,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function GET() {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    const baseUrl = process.env.BASE_URL;
     if (!baseUrl) {
       return NextResponse.json(
         { error: "Missing NEXT_PUBLIC_BASE_URL" },
