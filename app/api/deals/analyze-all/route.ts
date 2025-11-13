@@ -1,107 +1,82 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const MODEL = "models/gemini-2.5-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+const genAI = new GoogleGenerativeAI({
+  apiKey: process.env.GEMINI_API_KEY!,
+  baseUrl: "https://generativelanguage.googleapis.com/v1beta"
+});
 
 export async function GET() {
   try {
-    const { data: deals, error } = await supabase.from("deals").select("*");
-    if (error) throw error;
-    if (!deals || deals.length === 0) {
-      return NextResponse.json({ success: true, totalAnalyzed: 0, updatedDeals: [] });
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!baseUrl) {
+      return NextResponse.json({ error: "Missing NEXT_PUBLIC_BASE_URL" }, { status: 500 });
     }
 
-    const updatedDeals: Array<{ id: string; score: number; reason?: string }> = [];
+    // === 1. Charger tous les deals depuis l’API radar ===
+    const dealsRes = await fetch(`${baseUrl}/api/deals/radar?flashOnly=false`);
+    const dealsJson = await dealsRes.json();
+    const deals = dealsJson.deals || [];
 
+    const updatedDeals: any[] = [];
+
+    // === 2. Boucler sur les deals ===
     for (const d of deals) {
-      const prompt = `
-Return JSON only (no markdown fences):
-{"score": number (0-100), "reason": string}
-
-Deal:
-${JSON.stringify(
-  {
-    title: d.title,
-    store: d.store,
-    currentPrice: d.current_price ?? d.currentPrice,
-    previousPrice: d.previous_price ?? d.previousPrice,
-    category: d.category,
-    reliability_score: d.reliability_score ?? null,
-  },
-  null,
-  2
-)}
-      `.trim();
-
       try {
-        const res = await fetch(GEMINI_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-          }),
+        const model = genAI.getGenerativeModel({
+          model: "models/gemini-2.5-flash"
         });
 
-        const raw = await res.text();
-        if (!res.ok) {
-          console.error("❌ Gemini error for deal", d.id, raw);
-          continue;
+        const prompt = `
+        Analyze this deal and return a JSON:
+        {
+          "score": number,
+          "reason": string
         }
 
-        let text = "";
+        Deal:
+        ${JSON.stringify(d)}
+        `;
+
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+
+        let parsed = { score: 50, reason: "Parsing failed" };
+
         try {
-          const parsed = JSON.parse(raw);
-          text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+          parsed = JSON.parse(text.replace(/```json|```/g, ""));
         } catch {
-          text = raw.trim();
+          parsed = {
+            score: 50,
+            reason: "Parsing failed: " + text
+          };
         }
 
-        if (text.startsWith("```")) {
-          text = text.replace(/```json/i, "").replace(/```/g, "").trim();
-        }
+        const score = parsed.score ?? 0;
+        const reason = parsed.reason ?? "No reason provided";
 
-        let parsedOut: { score: number; reason?: string };
-        try {
-          parsedOut = JSON.parse(text);
-        } catch {
-          parsedOut = { score: 50, reason: "Could not parse response: " + text };
-        }
+        // === ⚠️ FIX POUR VERCEL (NE PLUS METTRE DE null) ===
+        updatedDeals.push({
+          id: d.id ?? "",
+          score,
+          reason
+        });
 
-        const score = Math.max(0, Math.min(100, Number(parsedOut.score || 0)));
-        const reason = parsedOut.reason ?? null;
-
-        // Update + historique
-        const { error: updErr } = await supabase
-          .from("deals")
-          .update({ reliability_score: score })
-          .eq("id", d.id);
-        if (updErr) throw updErr;
-
-        const { error: histErr } = await supabase
-          .from("deal_analysis_history")
-          .insert({ deal_id: d.id, score, reason, model: "gemini-2.5-flash" });
-        if (histErr) throw histErr;
-
-        updatedDeals.push({ id: d.id, score, reason });
-      } catch (e) {
-        console.error("❌ Error analyzing deal", d.id, e);
+      } catch (histErr) {
+        console.error("❌ Error analyzing deal", d.id, histErr);
       }
     }
 
     return NextResponse.json({
       success: true,
-      totalAnalyzed: updatedDeals.length,
-      updatedDeals,
+      analyzed: updatedDeals.length,
+      results: updatedDeals
     });
+
   } catch (e: any) {
-    console.error("❌ Error in analyze-all route:", e);
-    return NextResponse.json({ error: e.message || "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: e.message || "Analyze-all failed" },
+      { status: 500 }
+    );
   }
 }
