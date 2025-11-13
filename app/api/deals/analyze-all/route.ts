@@ -1,30 +1,30 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI({
-  apiKey: process.env.GEMINI_API_KEY!,
-  baseUrl: "https://generativelanguage.googleapis.com/v1beta"
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function GET() {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
     if (!baseUrl) {
-      return NextResponse.json({ error: "Missing NEXT_PUBLIC_BASE_URL" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Missing NEXT_PUBLIC_BASE_URL" },
+        { status: 500 }
+      );
     }
 
-    // === 1. Charger tous les deals depuis l’API radar ===
+    // === 1. Charger tous les deals ===
     const dealsRes = await fetch(`${baseUrl}/api/deals/radar?flashOnly=false`);
     const dealsJson = await dealsRes.json();
     const deals = dealsJson.deals || [];
 
     const updatedDeals: any[] = [];
 
-    // === 2. Boucler sur les deals ===
+    // === 2. Boucle analyse ===
     for (const d of deals) {
       try {
         const model = genAI.getGenerativeModel({
-          model: "models/gemini-2.5-flash"
+          model: "models/gemini-2.5-flash",
         });
 
         const prompt = `
@@ -48,34 +48,31 @@ export async function GET() {
         } catch {
           parsed = {
             score: 50,
-            reason: "Parsing failed: " + text
+            reason: "Parsing failed: " + text,
           };
         }
 
         const score = parsed.score ?? 0;
         const reason = parsed.reason ?? "No reason provided";
 
-        // === ⚠️ FIX POUR VERCEL (NE PLUS METTRE DE null) ===
         updatedDeals.push({
           id: d.id ?? "",
           score,
-          reason
+          reason,
         });
-
-      } catch (histErr) {
-        console.error("❌ Error analyzing deal", d.id, histErr);
+      } catch (e) {
+        console.error("❌ Error analyzing deal", d.id, e);
       }
     }
 
     return NextResponse.json({
       success: true,
       analyzed: updatedDeals.length,
-      results: updatedDeals
+      results: updatedDeals,
     });
-
-  } catch (e: any) {
+  } catch (err: any) {
     return NextResponse.json(
-      { error: e.message || "Analyze-all failed" },
+      { error: err.message || "Analyze-all failed" },
       { status: 500 }
     );
   }
