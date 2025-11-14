@@ -11,22 +11,38 @@ export async function GET() {
     const targetUrl = `https://www.amazon.fr/s?k=${query}`;
     const proxyUrl = `https://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&render=true&country=fr&device_type=desktop&url=${encodeURIComponent(targetUrl)}`;
 
-    const html = await fetch(proxyUrl).then(r => r.text());
+    const response = await fetch(proxyUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept-Language": "fr-FR,fr;q=0.9",
+      },
+    });
+
+    const html = await response.text();
+
+    // Vérifie qu’on reçoit bien la page produit
+    if (!html || !html.includes("s-search-results")) {
+      console.error("⚠️ Amazon returned no valid search results. HTML snippet:");
+      console.error(html.substring(0, 500));
+      throw new Error("Amazon returned an unexpected response");
+    }
+
     const $ = cheerio.load(html);
     const items: any[] = [];
 
-    // Sélecteurs plus souples pour nouvelles structures
-    $("div[data-asin]").each((_, el) => {
+    $("div[data-asin][data-component-type='s-search-result']").each((_, el) => {
       const title =
-        $(el).find("h2 span.a-text-normal").text().trim() ||
-        $(el).find("h2 a span").text().trim();
+        $(el).find("h2 a span").text().trim() ||
+        $(el).find("span.a-size-medium").text().trim();
       const price =
-        $(el).find(".a-price .a-offscreen").first().text().trim() || null;
-      const link =
-        $(el).find("h2 a").attr("href") || "";
-      const image = $(el).find("img").attr("src") || null;
+        $(el).find(".a-price .a-offscreen").first().text().trim() ||
+        $(el).find(".a-color-base .a-text-bold").first().text().trim() ||
+        null;
+      const link = $(el).find("h2 a").attr("href") || "";
+      const image = $(el).find("img.s-image").attr("src") || null;
 
-      if (title) {
+      if (title && price) {
         items.push({
           title,
           price,
