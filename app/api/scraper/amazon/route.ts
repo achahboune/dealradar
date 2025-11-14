@@ -20,33 +20,23 @@ export async function GET() {
     });
 
     const html = await response.text();
-
-    // Vérifie qu’on reçoit bien la page produit
-    if (!html || !html.includes("s-search-results")) {
-      console.error("⚠️ Amazon returned no valid search results. HTML snippet:");
-      console.error(html.substring(0, 500));
-      throw new Error("Amazon returned an unexpected response");
-    }
-
     const $ = cheerio.load(html);
     const items: any[] = [];
 
-    $("div[data-asin][data-component-type='s-search-result']").each((_, el) => {
-      const title =
-        $(el).find("h2 a span").text().trim() ||
-        $(el).find("span.a-size-medium").text().trim();
-      const price =
-        $(el).find(".a-price .a-offscreen").first().text().trim() ||
-        $(el).find(".a-color-base .a-text-bold").first().text().trim() ||
-        null;
-      const link = $(el).find("h2 a").attr("href") || "";
-      const image = $(el).find("img.s-image").attr("src") || null;
+    // ✅ Amazon v2025 selectors
+    $(".s-card-container[data-asin]").each((_, el) => {
+      const title = $(el).find("h2 a span").text().trim();
+      const price = $(el).find(".a-price .a-offscreen").first().text().trim();
+      const link = $(el).find("h2 a").attr("href");
+      const image = $(el).find("img.s-image").attr("src");
 
-      if (title && price) {
+      if (title && price && link) {
         items.push({
           title,
           price,
-          url: link.startsWith("http") ? link : `https://www.amazon.fr${link}`,
+          url: link.startsWith("http")
+            ? link
+            : `https://www.amazon.fr${link}`,
           image,
         });
       }
