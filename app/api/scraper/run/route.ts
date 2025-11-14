@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const baseUrl = process.env.BASE_URL || "http://localhost:3000";
+    const base = process.env.BASE_URL!;
 
     const [amazon, fnac, rakuten] = await Promise.all([
-      fetch(`${baseUrl}/api/scraper/amazon`).then((r) => r.json()),
-      fetch(`${baseUrl}/api/scraper/fnac`).then((r) => r.json()),
-      fetch(`${baseUrl}/api/scraper/rakuten`).then((r) => r.json()),
+      fetch(`${base}/api/scraper/amazon`).then((r) => r.json()),
+      fetch(`${base}/api/scraper/fnac`).then((r) => r.json()),
+      fetch(`${base}/api/scraper/rakuten`).then((r) => r.json()),
     ]);
 
     return NextResponse.json({
@@ -16,8 +16,8 @@ export async function GET() {
       fnac,
       rakuten,
     });
+
   } catch (e: any) {
-    console.error("❌ Error in /api/scraper/run:", e);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
