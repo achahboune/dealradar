@@ -11,29 +11,32 @@ export async function GET() {
     const targetUrl = `https://www.amazon.fr/s?k=${query}`;
     const proxyUrl = `https://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&render=true&country=fr&device_type=desktop&url=${encodeURIComponent(targetUrl)}`;
 
-    const response = await fetch(proxyUrl, {
+    console.log("🟢 Fetching from:", proxyUrl);
+
+    const html = await fetch(proxyUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept-Language": "fr-FR,fr;q=0.9",
       },
-    });
+    }).then((r) => r.text());
 
-    const html = await response.text();
+    // 💡 LOG HTML SNIPPET
+    console.log("🟡 HTML snippet:", html.substring(0, 800));
+
     const $ = cheerio.load(html);
     const items: any[] = [];
 
-    // ✅ Amazon v2025 selectors
     $(".s-card-container[data-asin]").each((_, el) => {
       const title = $(el).find("h2 a span").text().trim();
       const price = $(el).find(".a-price .a-offscreen").first().text().trim();
       const link = $(el).find("h2 a").attr("href");
       const image = $(el).find("img.s-image").attr("src");
 
-      if (title && price && link) {
+      if (title && link) {
         items.push({
           title,
-          price,
+          price: price || "N/A",
           url: link.startsWith("http")
             ? link
             : `https://www.amazon.fr${link}`,
