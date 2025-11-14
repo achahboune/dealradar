@@ -1,46 +1,44 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
+const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY;
+
 export async function GET() {
   try {
-    const API_KEY = process.env.SCRAPERAPI_KEY!;
-    const product = "iPhone+15+128GB";
+    if (!SCRAPERAPI_KEY) throw new Error("SCRAPERAPI_KEY is missing");
 
-    // MODE ANTI-BLOCAGE Amazon = render=true + device_type=desktop
-    const target = `https://www.amazon.fr/s?k=${product}`;
+    const query = "iphone+15+128gb";
+    const targetUrl = `https://www.amazon.fr/s?k=${query}`;
+    const proxyUrl = `https://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&render=true&country=fr&device_type=desktop&url=${encodeURIComponent(targetUrl)}`;
 
-    const url = `https://api.scraperapi.com?api_key=${API_KEY}&render=true&device_type=desktop&url=${encodeURIComponent(target)}`;
-
-    const html = await fetch(url).then((r) => r.text());
+    const html = await fetch(proxyUrl).then(r => r.text());
     const $ = cheerio.load(html);
-
     const items: any[] = [];
 
-    $(".s-result-item").each((_, el) => {
-      const title = $(el)
-        .find("h2 a span")
-        .text()
-        .trim();
-
-      const priceWhole = $(el).find(".a-price-whole").text();
-      const priceFraction = $(el).find(".a-price-fraction").text();
-      const price = priceWhole
-        ? priceWhole.replace(/\./g, "") + "." + priceFraction
-        : null;
+    // Sélecteurs plus souples pour nouvelles structures
+    $("div[data-asin]").each((_, el) => {
+      const title =
+        $(el).find("h2 span.a-text-normal").text().trim() ||
+        $(el).find("h2 a span").text().trim();
+      const price =
+        $(el).find(".a-price .a-offscreen").first().text().trim() || null;
+      const link =
+        $(el).find("h2 a").attr("href") || "";
+      const image = $(el).find("img").attr("src") || null;
 
       if (title) {
         items.push({
           title,
-          price: price ? parseFloat(price) : null,
+          price,
+          url: link.startsWith("http") ? link : `https://www.amazon.fr${link}`,
+          image,
         });
       }
     });
 
     return NextResponse.json({ success: true, items });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+  } catch (e: any) {
+    console.error("Amazon scraper error:", e);
+    return NextResponse.json({ success: false, error: e.message });
   }
 }
