@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: scraper-server
+    env: node
+    rootDir: scraper-server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: 0

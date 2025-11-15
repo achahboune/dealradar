@@ -1,43 +1,48 @@
+// api/scraper/amazon.ts
 import { chromium } from "playwright";
 
-export default async function handler(req, res) {
-  try {
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-    });
+export async function scrapeAmazon(query: string = "iphone 15 128go") {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
 
-    await page.goto("https://www.amazon.fr/s?k=iphone+15+128gb", {
-      waitUntil: "domcontentloaded",
-      timeout: 45000,
-    });
+  const url = `https://www.amazon.fr/s?k=${encodeURIComponent(query)}`;
 
-    const items = await page.$$eval("div[data-asin]", (products) =>
-      products
-        .map((p) => {
-          const title =
-            p.querySelector("h2 span")?.innerText?.trim() ?? null;
-          const price =
-            p.querySelector(".a-price .a-offscreen")?.innerText?.trim() ??
-            null;
-          const link = p.querySelector("h2 a")?.href ?? null;
-          const img = p.querySelector("img")?.src ?? null;
+  await page.goto(url, { waitUntil: "networkidle" });
 
-          if (!title) return null;
+  // Attendre que les items apparaissent
+  await page.waitForSelector("[data-asin]", { timeout: 10000 }).catch(() => {});
 
-          return { title, price, link, img };
-        })
-        .filter(Boolean)
-    );
+  const items = await page.$$eval("[data-asin]", (elements) =>
+    elements.map((el) => {
+      const title =
+        el.querySelector("h2 span")?.textContent?.trim() || null;
+      const price =
+        el.querySelector(".a-price .a-offscreen")?.textContent?.trim() ||
+        null;
+      const image =
+        el.querySelector("img")?.getAttribute("src") || null;
+      const link =
+        el.querySelector("h2 a")?.getAttribute("href") || null;
 
-    await browser.close();
+      if (!title) return null;
 
-    res.json({
-      success: true,
-      items,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
+      return {
+        title,
+        price,
+        image,
+        url: link?.startsWith("http")
+          ? link
+          : link
+          ? "https://www.amazon.fr" + link
+          : null,
+      };
+    })
+  );
+
+  await browser.close();
+
+  return {
+    success: true,
+    items: items.filter((x) => x), // remove nulls
+  };
 }
