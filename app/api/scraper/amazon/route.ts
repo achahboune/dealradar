@@ -14,7 +14,7 @@ export async function GET() {
 
     for (const asin of asinList) {
       const url = `https://www.amazon.com/dp/${asin}`;
-      const proxyUrl = `http://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&url=${encodeURIComponent(url)}`;
+const proxyUrl = `http://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&premium=true&country=fr&device_type=desktop&url=${encodeURIComponent(url)}`;
 
       const html = await fetch(proxyUrl).then(r => r.text());
       const $ = cheerio.load(html);
