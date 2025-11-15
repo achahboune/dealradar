@@ -1,23 +1,22 @@
 import express from "express";
-import { chromium } from "playwright"; 
+import { chromium } from "playwright";
 
 const app = express();
-app.use(express.json());
 
 app.get("/amazon", async (req, res) => {
   try {
     const browser = await chromium.launch({
       headless: true,
     });
-    const page = await browser.newPage();
 
+    const page = await browser.newPage();
     await page.goto("https://www.amazon.fr/s?k=iphone+15+128gb", {
       waitUntil: "domcontentloaded",
+      timeout: 60000,
     });
 
     const items = await page.evaluate(() => {
       const results = [];
-
       document.querySelectorAll("div[data-asin]").forEach((el) => {
         const title = el.querySelector("h2 span")?.textContent?.trim();
         const price = el.querySelector(".a-price .a-offscreen")?.textContent;
@@ -33,22 +32,18 @@ app.get("/amazon", async (req, res) => {
           });
         }
       });
-
       return results;
     });
 
     await browser.close();
     res.json({ success: true, items });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 app.get("/", (req, res) => {
-  res.send("Scraper server operational 🚀");
+  res.send("Scraper server running 🚀");
 });
 
 app.listen(10000, () => {
