@@ -7,47 +7,39 @@ export async function GET() {
   try {
     if (!SCRAPERAPI_KEY) throw new Error("SCRAPERAPI_KEY is missing");
 
-    const query = "iphone+15+128gb";
-    const targetUrl = `https://www.amazon.fr/s?k=${query}`;
-    const proxyUrl = `https://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&render=true&country=fr&device_type=desktop&url=${encodeURIComponent(targetUrl)}`;
+    // 🔹 Exemple d'ASIN pour un iPhone 15
+    const asinList = ["B0CB847XCK", "B0CHX41QH8", "B0CHX8Y2L8"];
 
-    console.log("🟢 Fetching from:", proxyUrl);
+    const results = [];
 
-    const html = await fetch(proxyUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept-Language": "fr-FR,fr;q=0.9",
-      },
-    }).then((r) => r.text());
+    for (const asin of asinList) {
+      const url = `https://www.amazon.com/dp/${asin}`;
+      const proxyUrl = `http://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&url=${encodeURIComponent(url)}`;
 
-    // 💡 LOG HTML SNIPPET
-    console.log("🟡 HTML snippet:", html.substring(0, 800));
+      const html = await fetch(proxyUrl).then(r => r.text());
+      const $ = cheerio.load(html);
 
-    const $ = cheerio.load(html);
-    const items: any[] = [];
+      const title = $("#productTitle").text().trim();
+      const price =
+        $("#corePriceDisplay_desktop_feature_div .a-offscreen").first().text().trim() ||
+        $("#priceblock_ourprice").text().trim() ||
+        $("#priceblock_dealprice").text().trim();
+      const image = $("#landingImage").attr("src");
+      const rating = $("span[data-hook='rating-out-of-text']").text().trim();
 
-    $(".s-card-container[data-asin]").each((_, el) => {
-      const title = $(el).find("h2 a span").text().trim();
-      const price = $(el).find(".a-price .a-offscreen").first().text().trim();
-      const link = $(el).find("h2 a").attr("href");
-      const image = $(el).find("img.s-image").attr("src");
+      results.push({
+        asin,
+        title: title || null,
+        price: price || null,
+        image: image || null,
+        rating: rating || null,
+        url,
+      });
+    }
 
-      if (title && link) {
-        items.push({
-          title,
-          price: price || "N/A",
-          url: link.startsWith("http")
-            ? link
-            : `https://www.amazon.fr${link}`,
-          image,
-        });
-      }
-    });
-
-    return NextResponse.json({ success: true, items });
+    return NextResponse.json({ success: true, items: results });
   } catch (e: any) {
-    console.error("Amazon scraper error:", e);
+    console.error("Amazon product scraper error:", e);
     return NextResponse.json({ success: false, error: e.message });
   }
 }
