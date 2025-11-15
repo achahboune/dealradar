@@ -1,22 +1,23 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
-
-const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY;
+import playwright from "playwright-core";
 
 export async function GET() {
+  const asins = ["B0CB847XCK", "B0CHX41QH8"]; // iPhone 15, etc.
+  const items: any[] = [];
+
   try {
-    if (!SCRAPERAPI_KEY) throw new Error("SCRAPERAPI_KEY is missing");
+    const browser = await playwright.chromium.launch({
+      headless: true,
+    });
+    const page = await browser.newPage();
 
-    // 🔹 Exemple d'ASIN pour un iPhone 15
-    const asinList = ["B0CB847XCK", "B0CHX41QH8", "B0CHX8Y2L8"];
+    for (const asin of asins) {
+      const url = `https://www.amazon.fr/dp/${asin}`;
+      console.log(`Scraping ${url}...`);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
 
-    const results = [];
-
-    for (const asin of asinList) {
-      const url = `https://www.amazon.com/dp/${asin}`;
-const proxyUrl = `http://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&premium=true&country=fr&device_type=desktop&url=${encodeURIComponent(url)}`;
-
-      const html = await fetch(proxyUrl).then(r => r.text());
+      const html = await page.content();
       const $ = cheerio.load(html);
 
       const title = $("#productTitle").text().trim();
@@ -27,19 +28,23 @@ const proxyUrl = `http://api.scraperapi.com?api_key=${SCRAPERAPI_KEY}&premium=tr
       const image = $("#landingImage").attr("src");
       const rating = $("span[data-hook='rating-out-of-text']").text().trim();
 
-      results.push({
-        asin,
-        title: title || null,
-        price: price || null,
-        image: image || null,
-        rating: rating || null,
-        url,
-      });
+      if (title) {
+        items.push({
+          asin,
+          title,
+          price,
+          image,
+          rating,
+          url,
+        });
+      }
     }
 
-    return NextResponse.json({ success: true, items: results });
-  } catch (e: any) {
-    console.error("Amazon product scraper error:", e);
-    return NextResponse.json({ success: false, error: e.message });
+    await browser.close();
+
+    return NextResponse.json({ success: true, items });
+  } catch (err: any) {
+    console.error("❌ Amazon scraper error:", err);
+    return NextResponse.json({ success: false, error: err.message });
   }
 }
