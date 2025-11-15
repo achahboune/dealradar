@@ -4,11 +4,10 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "build": "npx playwright install --with-deps",
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "playwright": "^1.48.2"
+    "express": "^4.19.0",
+    "puppeteer": "^21.6.1"
   }
 }

@@ -1,5 +1,5 @@
 import express from "express";
-import { chromium } from "playwright";
+import puppeteer from "puppeteer";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -10,50 +10,44 @@ app.get("/", (req, res) => {
 
 app.get("/amazon", async (req, res) => {
   try {
-    const browser = await chromium.launch({
-      headless: true,
+    const query = req.query.q || "iphone 15";
+
+    const browser = await puppeteer.launch({
+      headless: "new",
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-software-rasterizer"
+        "--disable-dev-shm-usage"
       ]
     });
 
     const page = await browser.newPage();
-
-    const query = req.query.q || "iphone 15 128gb";
     const url = `https://www.amazon.fr/s?k=${encodeURIComponent(query)}`;
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
-    await page.goto(url, { waitUntil: "domcontentloaded" });
-
-    // ⬇ Sélecteurs Amazon → toujours OK pour 2025
     const items = await page.evaluate(() => {
       const results = [];
       document.querySelectorAll("div[data-asin]").forEach((el) => {
         const title = el.querySelector("h2 span")?.innerText || null;
         const price = el.querySelector(".a-price .a-offscreen")?.innerText || null;
-        const image = el.querySelector("img")?.src || null;
+        const img = el.querySelector("img")?.src || null;
         const link = el.querySelector("h2 a")?.href || null;
 
-        if (title) {
-          results.push({ title, price, image, url: link });
-        }
+        if (title) results.push({ title, price, image: img, url: link });
       });
+
       return results;
     });
 
     await browser.close();
-
     res.json({ success: true, items });
 
-  } catch (error) {
-    console.error("Scraper error:", error);
-    res.status(500).json({ success: false, error: error.message });
+  } catch (err) {
+    console.error("Scraping error:", err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Scraper running on port ${PORT}`);
+  console.log(`🚀 Scraper server running on port ${PORT}`);
 });
