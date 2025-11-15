@@ -1,52 +1,64 @@
 import { NextResponse } from "next/server";
-import * as cheerio from "cheerio";
-import playwright from "playwright-core";
+import { chromium } from "playwright";
 
 export async function GET() {
-  const asins = ["B0CB847XCK", "B0CHX41QH8"]; // Produits test (iPhone 15, etc.)
-  const items: any[] = [];
-
   try {
-    const browser = await playwright.chromium.launch({
-      headless: true,
+    const browser = await chromium.launch({ headless: true });
+
+    const page = await browser.newPage({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
     });
-    const page = await browser.newPage();
 
-    for (const asin of asins) {
-      const url = `https://www.amazon.fr/dp/${asin}`;
-      console.log(`🔍 Scraping ${url}...`);
+    const query = "iphone 15 128gb";
+    const searchUrl = `https://www.amazon.fr/s?k=${encodeURIComponent(query)}`;
 
-      await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+    await page.goto(searchUrl, { waitUntil: "networkidle" });
 
-      // Attendre que le titre du produit soit visible
-      await page.waitForSelector("#productTitle", { timeout: 15000 }).catch(() => null);
+    // Attendre que les produits s’affichent
+    await page.waitForSelector("[data-asin]");
 
-      const html = await page.content();
-      const $ = cheerio.load(html);
+    const items = await page.evaluate(() => {
+      const results: any[] = [];
 
-      const title = $("#productTitle").text().trim();
-      const price =
-        $(".a-price .a-offscreen").first().text().trim() ||
-        $("#priceblock_ourprice").text().trim() ||
-        $("#priceblock_dealprice").text().trim();
-      const image =
-        $("#landingImage").attr("src") ||
-        $("img[data-old-hires]").attr("data-old-hires") ||
-        $("img[src]").first().attr("src");
-      const rating = $("span[data-hook='rating-out-of-text']").text().trim();
+      document.querySelectorAll("[data-asin]").forEach((el) => {
+        const asin = el.getAttribute("data-asin");
+        if (!asin) return;
 
-      if (title) {
-        items.push({ asin, title, price, image, rating, url });
-      } else {
-        console.warn(`⚠️ Aucun titre trouvé pour ${asin}`);
-      }
-    }
+        const title =
+          el.querySelector("h2 span")?.textContent?.trim() || null;
+
+        const price =
+          el.querySelector(".a-price .a-offscreen")?.textContent?.trim() ||
+          null;
+
+        const link =
+          el.querySelector("h2 a")?.getAttribute("href") || null;
+
+        const img =
+          el.querySelector("img")?.getAttribute("src") || null;
+
+        if (title) {
+          results.push({
+            asin,
+            title,
+            price,
+            url: link ? `https://www.amazon.fr${link}` : null,
+            image: img,
+          });
+        }
+      });
+
+      return results;
+    });
 
     await browser.close();
 
     return NextResponse.json({ success: true, items });
   } catch (err: any) {
-    console.error("❌ Amazon scraper error:", err);
-    return NextResponse.json({ success: false, error: err.message });
+    return NextResponse.json(
+      { success: false, error: err.message },
+      { status: 500 }
+    );
   }
 }
