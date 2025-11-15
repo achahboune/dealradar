@@ -4,6 +4,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
+    "build": "npx playwright install --with-deps",
     "start": "node server.js"
   },
   "dependencies": {
